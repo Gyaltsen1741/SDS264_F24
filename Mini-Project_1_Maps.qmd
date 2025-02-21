@@ -1,0 +1,174 @@
+---
+title: 'Mini-Project_1_Maps'
+author: Tenzin Gyaltsen
+format:
+  html: default
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r, Static Maps}
+# Load necessary libraries
+library(tidyverse)
+library(maps)
+library(ggplot2)
+library(sf)
+library(leaflet)
+library(poliscidata)
+library(viridis)
+library(stringr)
+
+# Load and clean the Guns dataset, filtering only for the year 1999
+Guns_1999 <- read_csv("Data/Guns.csv") |> 
+  filter(year == 1999) |> 
+  mutate(state = str_to_lower(str_squish(state)))
+
+# Load and clean static map data (using `maps` package)
+states_polygon <- map_data("state") |> 
+  as_tibble() |> 
+  rename(State = region)
+
+# Merge static data for visualization
+data_static <- states_polygon |> 
+  left_join(Guns_1999, 
+            by = c("State" = "state"))
+
+# Static Numeric Choropleth Map (Violent Crime Rate in 1999)
+ggplot(data_static, aes(x = long, 
+                        y = lat, 
+                        group = group, 
+                        fill = violent)) +
+  geom_polygon(color = "black", 
+               linewidth = 0.2) +
+  scale_fill_viridis_c(option = "magma", 
+                       name = "Violent Crime Rate", 
+                       direction = -1) +
+  coord_map() + 
+  theme_void() +
+  labs(title = "Violent Crime Rate per 100,000 (1999)",
+       caption = "Data: Guns dataset")
+
+# Load and clean the USSeatBelts dataset, filtering only for the year 1997
+USSeatBelts_1997 <- read_csv("Data/USSeatBelts.csv") |> 
+  filter(year == 1997) |> 
+  mutate(state = state.name[match(state, state.abb)]) |>  # Convert abbreviations to full names
+  mutate(state = str_to_lower(str_squish(state))) |>  
+  drop_na(state)
+
+# Load and clean static map data (using `maps` package)
+states_polygon <- map_data("state") |> 
+  as_tibble() |> 
+  rename(State = region)
+
+# Merge static data for visualization
+data_static <- states_polygon |> 
+  left_join(USSeatBelts_1997, 
+            by = c("State" = "state")) |> 
+  mutate(enforce = replace_na(enforce, "NA")) 
+
+# Define custom colors for enforce categories
+enforce_colors <- c("no" = "yellow", 
+                    "primary" = "blue", 
+                    "secondary" = "red", 
+                    "NA" = "gray")
+
+# Static Categorical Choropleth Map (Seat Belt Law Enforcement in 1997)
+ggplot(data_static, aes(x = long, 
+                        y = lat, 
+                        group = group, 
+                        fill = enforce)) +
+  geom_polygon(color = "black", 
+               linewidth = 0.2) +
+  scale_fill_manual(values = enforce_colors, 
+                    name = "Enforcement", 
+                    na.value = "gray") +
+  coord_map() + 
+  theme_void() +
+  labs(title = "Seat Belt Law Enforcement by State (1997)",
+       caption = "Data: USSeatBelts dataset")
+```
+
+
+```{r, Interactive Maps}
+# Load necessary libraries
+library(tidyverse)
+library(maps)
+library(ggplot2)
+library(sf)
+library(leaflet)
+library(poliscidata)
+library(viridis)
+library(stringr)
+
+# Load and clean the Guns dataset, filtering only for the year 1999
+Guns_1999 <- read_csv("Data/Guns.csv") |> 
+  filter(year == 1999) |> 
+  mutate(state = str_to_lower(str_squish(state)))
+
+# Load and clean interactive map data (using `sf` package)
+states_sf <- read_sf("https://rstudio.github.io/leaflet/json/us-states.geojson") |> 
+  select(name, geometry) |> 
+  mutate(name = str_to_lower(name))
+
+# Merge for interactive mapping
+data_interactive <- states_sf |> 
+  left_join(Guns_1999, 
+            by = c("name" = "state"))
+
+# Interactive Numeric Choropleth Map (Violent Crime Rate in 1999)
+pal_numeric <- colorNumeric("magma", 
+                            domain = data_interactive$violent, 
+                            reverse = TRUE, 
+                            na.color = "transparent")
+
+leaflet(data_interactive) |> 
+  addTiles() |> 
+  addPolygons(fillColor = ~pal_numeric(violent),
+              weight = 1, 
+              color = "white",
+              fillOpacity = 0.7,
+              popup = ~paste0(name, "<br> Violent Crime Rate (1999): ", violent)) |>
+  addLegend(pal = pal_numeric, 
+            values = ~violent, 
+            opacity = 0.7, 
+            title = "Violent Crime Rate (1999)", 
+            position = "bottomright")
+
+# Load and clean the USSeatBelts dataset, filtering only for the year 1997
+USSeatBelts_1997 <- read_csv("Data/USSeatBelts.csv") |> 
+  filter(year == 1997) |> 
+  mutate(state = state.name[match(state, state.abb)]) |>  # Convert abbreviations to full names
+  mutate(state = str_to_lower(str_squish(state))) |>  
+  drop_na(state)
+
+# Load and clean interactive map data (using `sf` package)
+states_sf <- read_sf("https://rstudio.github.io/leaflet/json/us-states.geojson") |> 
+  select(name, geometry) |> 
+  mutate(name = str_to_lower(name))
+
+# Merge for interactive mapping
+data_interactive <- states_sf |> 
+  left_join(USSeatBelts_1997, 
+            by = c("name" = "state")) |> 
+  mutate(enforce = replace_na(enforce, "NA"))  
+
+# Define color palette for categorical variable
+pal_categorical <- colorFactor(
+  palette = c("gray", "yellow", "blue", "red"),  
+  domain = c("no", "primary", "secondary", "NA")
+)
+
+# Interactive Categorical Choropleth Map (Seat Belt Law Enforcement in 1997)
+leaflet(data_interactive) |> 
+  addTiles() |> 
+  addPolygons(fillColor = ~pal_categorical(enforce),
+              weight = 1, 
+              color = "white",
+              fillOpacity = 0.7,
+              popup = ~paste0(name, "<br> Enforcement: ", enforce)) |>
+  addLegend(pal = pal_categorical, 
+            values = ~enforce, 
+            opacity = 0.7, 
+            title = "Seat Belt Law Enforcement (1997)", 
+            position = "bottomright")
+```
