@@ -1,0 +1,133 @@
+---
+title: 'Mini-Project_1_Interactive_Maps'
+author: Tenzin Gyaltsen
+format:
+  html: default
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r, Interactive Maps}
+# Load necessary libraries
+library(tidyverse)
+library(sf)
+library(leaflet)
+library(stringr)
+library(readr)
+library(htmltools)
+
+# ----------- Violent Crime Rate Map (1999) -----------
+
+# Load and filter Guns dataset for 1999
+Guns_1999 <- read_csv("Data/Guns.csv") |> 
+  filter(year == 1999) |> 
+  mutate(state = str_to_lower(str_squish(state)))  # Standardize state names
+
+# Load US states geometry data for interactive mapping
+states_sf <- read_sf("https://rstudio.github.io/leaflet/json/us-states.geojson") |> 
+  select(name, geometry) |> 
+  mutate(name = str_to_lower(name))  # Standardize state names
+
+# Merge violent crime data with state geometries
+data_interactive <- states_sf |> 
+  left_join(Guns_1999, by = c("name" = "state"))
+
+# Define numeric color scale for violent crime rates
+pal_numeric <- colorNumeric(
+  palette = "magma", 
+  domain = data_interactive$violent, 
+  reverse = TRUE,  # Ensures high values are dark, low values are light
+  na.color = "transparent"  # Hide missing values instead of coloring them
+)
+
+# Ensure state names are capitalized before using them in tooltips
+data_interactive <- data_interactive |> 
+  mutate(name = str_to_title(name))  # Capitalize state names
+
+# Generate interactive choropleth map for violent crime rates
+leaflet(data_interactive) |> 
+  addTiles() |> 
+  addPolygons(fillColor = ~pal_numeric(violent),
+              weight = 1, 
+              color = "white",
+              fillOpacity = 0.7,
+              label = lapply(
+                paste0(
+                  "<strong>", data_interactive$name, "</strong><br>",  # Capitalized state name
+                  "Violent Crime Rate (1999): <strong>", data_interactive$violent, "</strong> per 100,000"), HTML),  # Convert text to HTML for proper formatting
+              labelOptions = labelOptions(
+                style = list(
+                  "font-weight" = "normal", 
+                  "padding" = "6px",
+                  "background" = "rgba(255,255,255,0.8)",  # Semi-transparent white background
+                  "border" = "1px solid black",
+                  "border-radius" = "5px"
+                ),
+                textsize = "13px",
+                direction = "auto"
+              )) |>
+  addLegend(pal = pal_numeric, 
+            values = ~violent, 
+            opacity = 0.7, 
+            title = "Violent Crime Rate (1999)", 
+            position = "bottomright")
+
+
+# ----------- Seat Belt Law Enforcement Map (1997) -----------
+
+# Load and filter seat belt law data for 1997
+USSeatBelts_1997 <- read_csv("Data/USSeatBelts.csv") |> 
+  filter(year == 1997) |> 
+  mutate(state = state.name[match(state, state.abb)],  # Convert abbreviations to full names
+         state = str_to_lower(str_squish(state))) |>  # Standardize state names
+  drop_na(state)  # Ensure valid state names only
+
+# Load US states geometry data for interactive mapping
+states_sf <- read_sf("https://rstudio.github.io/leaflet/json/us-states.geojson") |> 
+  select(name, geometry) |> 
+  mutate(name = str_to_lower(name))  # Standardize state names
+
+# Merge seat belt law data with state geometries
+data_interactive <- states_sf |> 
+  left_join(USSeatBelts_1997, by = c("name" = "state")) |> 
+  mutate(enforce = replace_na(enforce, "NA"))  # Explicitly label missing enforcement data
+
+# Define categorical color mapping for seat belt laws
+pal_categorical <- colorFactor(
+  palette = c("gray", "yellow", "blue", "red"),  # Matches static map color scheme
+  domain = c("no", "primary", "secondary", "NA")
+)
+
+# Ensure state names are capitalized before using them in tooltips
+data_interactive <- data_interactive |> 
+  mutate(name = str_to_title(name))  # Capitalize state names
+
+# Generate interactive choropleth map for seat belt law enforcement
+leaflet(data_interactive) |> 
+  addTiles() |> 
+  addPolygons(fillColor = ~pal_categorical(enforce),
+              weight = 1, 
+              color = "white",
+              fillOpacity = 0.7,
+              label = lapply(
+                paste0(
+                  "<strong>", data_interactive$name, "</strong><br>",  # Capitalized state name
+                  "Seat Belt Enforcement: <strong>", data_interactive$enforce, "</strong>"), HTML),  # Convert text to HTML for proper formatting
+              labelOptions = labelOptions(
+                style = list(
+                  "font-weight" = "normal", 
+                  "padding" = "6px",
+                  "background" = "rgba(255,255,255,0.8)",  # Semi-transparent white background
+                  "border" = "1px solid black",
+                  "border-radius" = "5px"
+                ),
+                textsize = "13px",
+                direction = "auto"
+              )) |>
+  addLegend(pal = pal_categorical, 
+            values = ~enforce, 
+            opacity = 0.7, 
+            title = "Seat Belt Law Enforcement (1997)", 
+            position = "bottomright")
+```
+
